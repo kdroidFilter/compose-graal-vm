@@ -1,28 +1,56 @@
-This is a Kotlin Multiplatform project targeting Desktop (JVM).
+# Compose GraalVM
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-      folder is the appropriate location.
+Jetpack Compose Desktop running as a GraalVM native image on macOS.
 
-### Build and Run Desktop (JVM) Application
+## Prerequisites
 
-To build and run the development version of the desktop app, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
+### JDK for development
 
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:run
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:run
-  ```
+Any JDK 21+ works for running the app on the JVM.
 
----
+### Liberica NIK Full for native image
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+Building a native image **requires [Liberica NIK Full](https://bell-sw.com/liberica-native-image-kit/)** (Native Image Kit). Oracle GraalVM and standard Liberica NIK do **not** work because AWT on macOS needs the full JDK modules that only NIK Full includes.
+
+Install it and set it as your `JAVA_HOME` (or configure it in your IDE/Gradle JVM settings) before building the native image.
+
+> On macOS with Homebrew:
+> ```bash
+> brew install --cask liberica-native-image-kit-full
+> ```
+
+## Build and Run
+
+### Development (JVM)
+
+```bash
+./gradlew :composeApp:run
+```
+
+### Native image
+
+Make sure Gradle runs with Liberica NIK Full, then:
+
+```bash
+./gradlew :composeApp:packageNative
+```
+
+The output is a macOS `.app` bundle at:
+
+```
+composeApp/build/native/ComposeGraalVM.app
+```
+
+Launch it with:
+
+```bash
+open composeApp/build/native/ComposeGraalVM.app
+```
+
+### Collect reflection metadata (tracing agent)
+
+```bash
+./gradlew :composeApp:runWithAgent
+```
+
+Interact with the app, then close it. Config files are written to `composeApp/src/main/resources/META-INF/native-image/`.

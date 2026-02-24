@@ -28,6 +28,7 @@ dependencies {
 val javaHomeDir = provider { org.gradle.internal.jvm.Jvm.current().javaHome.absolutePath }
 
 val nativeImageConfigDir = layout.projectDirectory.dir("src/main/resources/META-INF/native-image")
+val appBundleDir = layout.buildDirectory.dir("native/ComposeGraalVM.app/Contents")
 
 tasks.register<JavaExec>("runWithAgent") {
     description = "Run the app with the native-image-agent to collect reflection metadata"
@@ -63,9 +64,18 @@ graalvmNative {
     }
 }
 
-// Copy AWT dylibs and add rpath after native compilation
+// Package native image as a macOS .app bundle
+tasks.register<Copy>("copyBinaryToApp") {
+    description = "Copy native binary into .app bundle"
+    group = "build"
+    dependsOn("nativeCompile")
+
+    from(layout.buildDirectory.file("native/nativeCompile/compose-graal-vm"))
+    into(appBundleDir.map { it.dir("MacOS") })
+}
+
 tasks.register<Copy>("copyAwtDylibs") {
-    description = "Copy AWT dylibs next to the native image"
+    description = "Copy AWT dylibs into .app bundle"
     group = "build"
     dependsOn("nativeCompile")
 
@@ -80,7 +90,7 @@ tasks.register<Copy>("copyAwtDylibs") {
     from("${javaHomeDir.get()}/lib/server") {
         include("libjvm.dylib")
     }
-    into(layout.buildDirectory.dir("native/nativeCompile"))
+    into(appBundleDir.map { it.dir("MacOS") })
 }
 
 tasks.register<Copy>("copyJawtToLib") {
@@ -91,21 +101,29 @@ tasks.register<Copy>("copyJawtToLib") {
     from("${javaHomeDir.get()}/lib") {
         include("libjawt.dylib")
     }
-    into(layout.buildDirectory.dir("native/nativeCompile/lib"))
+    into(appBundleDir.map { it.dir("MacOS/lib") })
 }
 
 tasks.register<Exec>("fixRpath") {
     description = "Add @executable_path rpath to native image"
     group = "build"
-    dependsOn("nativeCompile")
+    dependsOn("copyBinaryToApp")
 
-    val binary = layout.buildDirectory.file("native/nativeCompile/compose-graal-vm")
+    val binary = appBundleDir.map { it.file("MacOS/compose-graal-vm") }
     commandLine("install_name_tool", "-add_rpath", "@executable_path/.", binary.get().asFile.absolutePath)
     isIgnoreExitValue = true
 }
 
-tasks.register("packageNative") {
-    description = "Build native image and package with required dylibs"
+tasks.register<Copy>("copyInfoPlist") {
+    description = "Copy Info.plist into .app bundle"
     group = "build"
-    dependsOn("copyAwtDylibs", "copyJawtToLib", "fixRpath")
+
+    from(layout.projectDirectory.file("src/main/packaging/Info.plist"))
+    into(appBundleDir)
+}
+
+tasks.register("packageNative") {
+    description = "Build native image and package as macOS .app bundle"
+    group = "build"
+    dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "fixRpath", "copyInfoPlist")
 }
