@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            jdk-url: https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-linux-amd64.tar.gz
+            jdk-archive: tar.gz
+            artifact-name: compose-graal-vm-linux-x64
+          - os: macos-latest
+            platform: macos-arm64
+            jdk-url: https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-macos-aarch64.tar.gz
+            jdk-archive: tar.gz
+            artifact-name: compose-graal-vm-macos-arm64
+          - os: windows-latest
+            platform: windows-x64
+            jdk-url: https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-windows-amd64.zip
+            jdk-archive: zip
+            artifact-name: compose-graal-vm-windows-x64
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Liberica NIK Full
+        shell: bash
+        run: |
+          curl -L -o jdk-archive.${{ matrix.jdk-archive }} "${{ matrix.jdk-url }}"
+          if [ "${{ matrix.jdk-archive }}" = "tar.gz" ]; then
+            mkdir -p jdk
+            tar -xzf jdk-archive.tar.gz -C jdk --strip-components=1
+          else
+            7z x jdk-archive.zip -ojdk-extracted
+            mv jdk-extracted/$(ls jdk-extracted) jdk
+          fi
+
+      - name: Set JAVA_HOME
+        shell: bash
+        run: echo "JAVA_HOME=${{ github.workspace }}/jdk" >> "$GITHUB_ENV"
+
+      - name: Install patchelf (Linux)
+        if: matrix.platform == 'linux-x64'
+        run: sudo apt-get install -y patchelf
+
+      - name: Build native image
+        shell: bash
+        run: ./gradlew :composeApp:packageNative --no-daemon
+
+      - name: Zip artifact (macOS)
+        if: matrix.platform == 'macos-arm64'
+        working-directory: composeApp/build/native
+        run: zip -r ${{ github.workspace }}/${{ matrix.artifact-name }}.zip ComposeGraalVM.app
+
+      - name: Zip artifact (Linux)
+        if: matrix.platform == 'linux-x64'
+        working-directory: composeApp/build/native
+        run: zip -r ${{ github.workspace }}/${{ matrix.artifact-name }}.zip compose-graal-vm
+
+      - name: Zip artifact (Windows)
+        if: matrix.platform == 'windows-x64'
+        working-directory: composeApp/build/native
+        shell: bash
+        run: 7z a ${{ github.workspace }}/${{ matrix.artifact-name }}.zip compose-graal-vm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: '*.zip'
