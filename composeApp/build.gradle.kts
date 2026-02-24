@@ -90,7 +90,7 @@ graalvmNative {
                 "-H:-IncludeMethodData",
             )
             if (isMac) {
-                buildArgs.add("-H:NativeLinkerOption=-Wl,-U,_Java_java_awt_Cursor_finalizeImpl")
+                buildArgs.add("-H:NativeLinkerOption=${layout.buildDirectory.asFile.get()}/cursor_stub.o")
             }
             if (isWindows) {
                 buildArgs.addAll(
@@ -100,6 +100,27 @@ graalvmNative {
             }
             resources.autodetect()
         }
+    }
+}
+
+// ── macOS: compile C stubs ──
+
+if (isMac) {
+    tasks.register<Exec>("compileStubs") {
+        description = "Compile C stubs for symbols referenced by AWT flat-namespace dylibs"
+        group = "build"
+
+        val src = layout.projectDirectory.file("src/main/c/cursor_stub.c")
+        val out = layout.buildDirectory.file("cursor_stub.o")
+
+        inputs.file(src)
+        outputs.file(out)
+
+        commandLine("clang", "-c", src.asFile.absolutePath, "-o", out.get().asFile.absolutePath)
+    }
+
+    tasks.named("nativeCompile") {
+        dependsOn("compileStubs")
     }
 }
 
