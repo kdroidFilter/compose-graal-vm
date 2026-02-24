@@ -1,23 +1,35 @@
 # Compose GraalVM
 
-Jetpack Compose Desktop running as a GraalVM native image on macOS.
+A demo of Jetpack Compose Desktop compiled to a GraalVM native image on macOS, Windows and Linux.
 
 ## Prerequisites
 
 ### JDK for development
 
-Any JDK 21+ works for running the app on the JVM.
+Any JDK 21+ works for running the app on the JVM (`./gradlew :composeApp:run`).
 
 ### Liberica NIK Full for native image
 
-Building a native image **requires [Liberica NIK Full](https://bell-sw.com/liberica-native-image-kit/)** (Native Image Kit). Oracle GraalVM and standard Liberica NIK do **not** work because AWT on macOS needs the full JDK modules that only NIK Full includes.
+Building a native image **requires [Liberica NIK Full](https://bell-sw.com/liberica-native-image-kit/)** (Native Image Kit). Oracle GraalVM and standard Liberica NIK do **not** include the AWT/Swing modules needed by Compose Desktop.
 
-Install it and set it as your `JAVA_HOME` (or configure it in your IDE/Gradle JVM settings) before building the native image.
+Download links (JDK 25):
 
-> On macOS with Homebrew:
-> ```bash
-> brew install --cask liberica-native-image-kit-full
-> ```
+| Platform | Download |
+|---|---|
+| macOS aarch64 | [bellsoft-liberica-vm-full-openjdk25-macos-aarch64.tar.gz](https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-macos-aarch64.tar.gz) |
+| Windows x64 | [bellsoft-liberica-vm-full-openjdk25-windows-amd64.zip](https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-windows-amd64.zip) |
+| Linux x64 | [bellsoft-liberica-vm-full-openjdk25-linux-amd64.tar.gz](https://download.bell-sw.com/vm/25.0.2/bellsoft-liberica-vm-full-openjdk25.0.2+13-25.0.2+1-linux-amd64.tar.gz) |
+
+Set `JAVA_HOME` to the extracted directory before building the native image.
+
+
+### Linux dependencies
+
+Building on Linux requires `patchelf` to set the RPATH on the native binary:
+
+```bash
+sudo apt install patchelf
+```
 
 ## Build and Run
 
@@ -29,23 +41,19 @@ Install it and set it as your `JAVA_HOME` (or configure it in your IDE/Gradle JV
 
 ### Native image
 
-Make sure Gradle runs with Liberica NIK Full, then:
+Make sure `JAVA_HOME` points to Liberica NIK Full, then:
 
 ```bash
 ./gradlew :composeApp:packageNative
 ```
 
-The output is a macOS `.app` bundle at:
+Output per platform:
 
-```
-composeApp/build/native/ComposeGraalVM.app
-```
-
-Launch it with:
-
-```bash
-open composeApp/build/native/ComposeGraalVM.app
-```
+| Platform | Output path |
+|---|---|
+| macOS | `composeApp/build/native/ComposeGraalVM.app` |
+| Windows | `composeApp/build/native/compose-graal-vm/` |
+| Linux | `composeApp/build/native/compose-graal-vm/` |
 
 ### Collect reflection metadata (tracing agent)
 
@@ -53,4 +61,4 @@ open composeApp/build/native/ComposeGraalVM.app
 ./gradlew :composeApp:runWithAgent
 ```
 
-Interact with the app, then close it. Config files are written to `composeApp/src/main/resources/META-INF/native-image/`.
+Interact with the app, then close it. Config files are written to the platform-specific `resources-{macos,windows,linux}/META-INF/native-image/` directory.
