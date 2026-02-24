@@ -58,6 +58,8 @@ graalvmNative {
                 "-march=native",
                 "-H:+AddAllCharsets",
                 "-Djava.awt.headless=false",
+                "-Os",
+                "-H:-IncludeMethodData",
             )
             resources.autodetect()
         }
@@ -84,7 +86,7 @@ tasks.register<Copy>("copyAwtDylibs") {
             "libawt.dylib", "libawt_lwawt.dylib", "libfontmanager.dylib",
             "libfreetype.dylib", "libjava.dylib", "libjavajpeg.dylib",
             "libjawt.dylib", "liblcms.dylib", "libmlib_image.dylib",
-            "libosxapp.dylib", "libosxui.dylib", "libsplashscreen.dylib",
+            "libosxapp.dylib", "libsplashscreen.dylib",
         )
     }
     from("${javaHomeDir.get()}/lib/server") {
@@ -102,6 +104,24 @@ tasks.register<Copy>("copyJawtToLib") {
         include("libjawt.dylib")
     }
     into(appBundleDir.map { it.dir("MacOS/lib") })
+}
+
+tasks.register<Exec>("stripDylibs") {
+    description = "Strip debug symbols from dylibs to reduce size"
+    group = "build"
+    dependsOn("copyAwtDylibs")
+
+    val macosDir = appBundleDir.map { it.dir("MacOS") }
+    commandLine("bash", "-c", "strip -x ${macosDir.get().asFile.absolutePath}/*.dylib")
+}
+
+tasks.register<Exec>("codesignDylibs") {
+    description = "Re-sign dylibs after stripping (ad-hoc)"
+    group = "build"
+    dependsOn("stripDylibs")
+
+    val macosDir = appBundleDir.map { it.dir("MacOS") }
+    commandLine("bash", "-c", "codesign --force --sign - ${macosDir.get().asFile.absolutePath}/*.dylib")
 }
 
 tasks.register<Exec>("fixRpath") {
@@ -125,5 +145,5 @@ tasks.register<Copy>("copyInfoPlist") {
 tasks.register("packageNative") {
     description = "Build native image and package as macOS .app bundle"
     group = "build"
-    dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "fixRpath", "copyInfoPlist")
+    dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "stripDylibs", "codesignDylibs", "fixRpath", "copyInfoPlist")
 }
