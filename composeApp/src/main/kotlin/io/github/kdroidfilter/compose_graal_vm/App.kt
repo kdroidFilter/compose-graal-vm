@@ -1,6 +1,7 @@
 package io.github.kdroidfilter.compose_graal_vm
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeContentPadding
@@ -15,12 +16,11 @@ import androidx.compose.ui.tooling.preview.Preview
 @Preview
 fun App() {
     MaterialTheme(colorScheme = darkColorScheme()) {
-        Column(
+        Box(
             modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
         ) {
             NucleusAtom()
         }
