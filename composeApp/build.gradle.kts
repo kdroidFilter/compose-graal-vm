@@ -215,6 +215,7 @@ if (isMac) {
     tasks.register<Copy>("copyInfoPlist") {
         description = "Copy Info.plist into .app bundle"
         group = "build"
+        dependsOn("cleanAppBundle")
 
         from(layout.projectDirectory.file("src/main/packaging/Info.plist"))
         into(appBundleDir)
