@@ -62,7 +62,7 @@ jobs:
 
       - name: Build native image
         shell: bash
-        run: ./gradlew :composeApp:packageNative --no-daemon
+        run: ./gradlew :composeApp:packageNative --no-daemon -PnativeMarch=compatibility
 
       - name: Zip artifact (macOS)
         if: matrix.platform == 'macos-arm64'

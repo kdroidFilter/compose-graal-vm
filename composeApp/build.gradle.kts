@@ -81,8 +81,9 @@ graalvmNative {
                 languageVersion.set(JavaLanguageVersion.of(25))
                 vendor.set(JvmVendorSpec.BELLSOFT)
             })
+            val march = providers.gradleProperty("nativeMarch").getOrElse("native")
             buildArgs.addAll(
-                "-march=native",
+                "-march=$march",
                 "-H:+AddAllCharsets",
                 "-Djava.awt.headless=false",
                 "-Os",
