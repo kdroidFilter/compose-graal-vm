@@ -85,6 +85,12 @@ graalvmNative {
                 "-Os",
                 "-H:-IncludeMethodData",
             )
+            if (isWindows) {
+                buildArgs.addAll(
+                    "-H:NativeLinkerOption=/SUBSYSTEM:WINDOWS",
+                    "-H:NativeLinkerOption=/ENTRY:mainCRTStartup",
+                )
+            }
             resources.autodetect()
         }
     }
