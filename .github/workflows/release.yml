@@ -49,7 +49,12 @@ jobs:
 
       - name: Set JAVA_HOME
         shell: bash
-        run: echo "JAVA_HOME=${{ github.workspace }}/jdk" >> "$GITHUB_ENV"
+        run: |
+          if [ -d "${{ github.workspace }}/jdk/Contents/Home" ]; then
+            echo "JAVA_HOME=${{ github.workspace }}/jdk/Contents/Home" >> "$GITHUB_ENV"
+          else
+            echo "JAVA_HOME=${{ github.workspace }}/jdk" >> "$GITHUB_ENV"
+          fi
 
       - name: Install patchelf (Linux)
         if: matrix.platform == 'linux-x64'
