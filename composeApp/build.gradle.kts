@@ -88,6 +88,9 @@ graalvmNative {
                 "-Os",
                 "-H:-IncludeMethodData",
             )
+            if (isMac) {
+                buildArgs.add("-H:NativeLinkerOption=-Wl,-U,_Java_java_awt_Cursor_finalizeImpl")
+            }
             if (isWindows) {
                 buildArgs.addAll(
                     "-H:NativeLinkerOption=/SUBSYSTEM:WINDOWS",
