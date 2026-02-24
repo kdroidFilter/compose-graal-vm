@@ -1,6 +1,6 @@
 # Compose GraalVM
 
-A demo of Jetpack Compose Desktop compiled to a GraalVM native image on macOS, Windows and Linux.
+A demo of Compose Desktop compiled to a GraalVM native image on macOS, Windows and Linux.
 
 ## Prerequisites
 
