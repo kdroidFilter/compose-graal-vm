@@ -129,10 +129,17 @@ if (isMac) {
 val appBundleDir = layout.buildDirectory.dir("native/ComposeGraalVM.app/Contents")
 
 if (isMac) {
+    tasks.register<Delete>("cleanAppBundle") {
+        description = "Remove stale .app bundle before rebuilding to avoid leftover strip temp files"
+        group = "build"
+        mustRunAfter("nativeCompile")
+        delete(layout.buildDirectory.dir("native/ComposeGraalVM.app"))
+    }
+
     tasks.register<Copy>("copyBinaryToApp") {
         description = "Copy native binary into .app bundle"
         group = "build"
-        dependsOn("nativeCompile")
+        dependsOn("nativeCompile", "cleanAppBundle")
 
         from(layout.buildDirectory.file("native/nativeCompile/compose-graal-vm"))
         into(appBundleDir.map { it.dir("MacOS") })
@@ -141,7 +148,7 @@ if (isMac) {
     tasks.register<Copy>("copyAwtDylibs") {
         description = "Copy AWT dylibs into .app bundle"
         group = "build"
-        dependsOn("nativeCompile")
+        dependsOn("nativeCompile", "cleanAppBundle")
 
         from("${javaHomeDir.get()}/lib") {
             include(
@@ -160,7 +167,7 @@ if (isMac) {
     tasks.register<Copy>("copyJawtToLib") {
         description = "Copy libjawt.dylib to lib/ subdir for Skiko"
         group = "build"
-        dependsOn("nativeCompile")
+        dependsOn("nativeCompile", "cleanAppBundle")
 
         from("${javaHomeDir.get()}/lib") {
             include("libjawt.dylib")
