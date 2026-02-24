@@ -4,11 +4,21 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.graalvmNative)
-    application
 }
 
-application {
-    mainClass.set("io.github.kdroidfilter.compose_graal_vm.MainKt")
+val isMac = org.gradle.internal.os.OperatingSystem.current().isMacOsX
+val isWindows = org.gradle.internal.os.OperatingSystem.current().isWindows
+
+sourceSets {
+    main {
+        resources.srcDir(
+            when {
+                isMac -> "src/main/resources-macos"
+                isWindows -> "src/main/resources-windows"
+                else -> throw GradleException("Unsupported OS")
+            }
+        )
+    }
 }
 
 dependencies {
@@ -25,10 +35,24 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
+compose.desktop {
+    application {
+        mainClass = "io.github.kdroidfilter.compose_graal_vm.MainKt"
+        nativeDistributions {
+            modules("jdk.accessibility")
+        }
+    }
+}
+
 val javaHomeDir = provider { org.gradle.internal.jvm.Jvm.current().javaHome.absolutePath }
 
-val nativeImageConfigDir = layout.projectDirectory.dir("src/main/resources/META-INF/native-image")
-val appBundleDir = layout.buildDirectory.dir("native/ComposeGraalVM.app/Contents")
+val nativeImageConfigDir = layout.projectDirectory.dir(
+    when {
+        isMac -> "src/main/resources-macos/META-INF/native-image"
+        isWindows -> "src/main/resources-windows/META-INF/native-image"
+        else -> throw GradleException("Unsupported OS")
+    }
+)
 
 tasks.register<JavaExec>("runWithAgent") {
     description = "Run the app with the native-image-agent to collect reflection metadata"
@@ -66,84 +90,160 @@ graalvmNative {
     }
 }
 
-// Package native image as a macOS .app bundle
-tasks.register<Copy>("copyBinaryToApp") {
-    description = "Copy native binary into .app bundle"
-    group = "build"
-    dependsOn("nativeCompile")
+// ── macOS packaging: .app bundle ──
 
-    from(layout.buildDirectory.file("native/nativeCompile/compose-graal-vm"))
-    into(appBundleDir.map { it.dir("MacOS") })
-}
+val appBundleDir = layout.buildDirectory.dir("native/ComposeGraalVM.app/Contents")
 
-tasks.register<Copy>("copyAwtDylibs") {
-    description = "Copy AWT dylibs into .app bundle"
-    group = "build"
-    dependsOn("nativeCompile")
+if (isMac) {
+    tasks.register<Copy>("copyBinaryToApp") {
+        description = "Copy native binary into .app bundle"
+        group = "build"
+        dependsOn("nativeCompile")
 
-    from("${javaHomeDir.get()}/lib") {
-        include(
-            "libawt.dylib", "libawt_lwawt.dylib", "libfontmanager.dylib",
-            "libfreetype.dylib", "libjava.dylib", "libjavajpeg.dylib",
-            "libjawt.dylib", "liblcms.dylib", "libmlib_image.dylib",
-            "libosxapp.dylib", "libsplashscreen.dylib",
-        )
+        from(layout.buildDirectory.file("native/nativeCompile/compose-graal-vm"))
+        into(appBundleDir.map { it.dir("MacOS") })
     }
-    from("${javaHomeDir.get()}/lib/server") {
-        include("libjvm.dylib")
+
+    tasks.register<Copy>("copyAwtDylibs") {
+        description = "Copy AWT dylibs into .app bundle"
+        group = "build"
+        dependsOn("nativeCompile")
+
+        from("${javaHomeDir.get()}/lib") {
+            include(
+                "libawt.dylib", "libawt_lwawt.dylib", "libfontmanager.dylib",
+                "libfreetype.dylib", "libjava.dylib", "libjavajpeg.dylib",
+                "libjawt.dylib", "liblcms.dylib", "libmlib_image.dylib",
+                "libosxapp.dylib", "libsplashscreen.dylib",
+            )
+        }
+        from("${javaHomeDir.get()}/lib/server") {
+            include("libjvm.dylib")
+        }
+        into(appBundleDir.map { it.dir("MacOS") })
     }
-    into(appBundleDir.map { it.dir("MacOS") })
-}
 
-tasks.register<Copy>("copyJawtToLib") {
-    description = "Copy libjawt.dylib to lib/ subdir for Skiko"
-    group = "build"
-    dependsOn("nativeCompile")
+    tasks.register<Copy>("copyJawtToLib") {
+        description = "Copy libjawt.dylib to lib/ subdir for Skiko"
+        group = "build"
+        dependsOn("nativeCompile")
 
-    from("${javaHomeDir.get()}/lib") {
-        include("libjawt.dylib")
+        from("${javaHomeDir.get()}/lib") {
+            include("libjawt.dylib")
+        }
+        into(appBundleDir.map { it.dir("MacOS/lib") })
     }
-    into(appBundleDir.map { it.dir("MacOS/lib") })
+
+    tasks.register<Exec>("stripDylibs") {
+        description = "Strip debug symbols from dylibs to reduce size"
+        group = "build"
+        dependsOn("copyAwtDylibs")
+
+        val macosDir = appBundleDir.map { it.dir("MacOS") }
+        commandLine("bash", "-c", "strip -x ${macosDir.get().asFile.absolutePath}/*.dylib")
+    }
+
+    tasks.register<Exec>("codesignDylibs") {
+        description = "Re-sign dylibs after stripping (ad-hoc)"
+        group = "build"
+        dependsOn("stripDylibs")
+
+        val macosDir = appBundleDir.map { it.dir("MacOS") }
+        commandLine("bash", "-c", "codesign --force --sign - ${macosDir.get().asFile.absolutePath}/*.dylib")
+    }
+
+    tasks.register<Exec>("fixRpath") {
+        description = "Add @executable_path rpath to native image"
+        group = "build"
+        dependsOn("copyBinaryToApp")
+
+        val binary = appBundleDir.map { it.file("MacOS/compose-graal-vm") }
+        commandLine("install_name_tool", "-add_rpath", "@executable_path/.", binary.get().asFile.absolutePath)
+        isIgnoreExitValue = true
+    }
+
+    tasks.register<Copy>("copyInfoPlist") {
+        description = "Copy Info.plist into .app bundle"
+        group = "build"
+
+        from(layout.projectDirectory.file("src/main/packaging/Info.plist"))
+        into(appBundleDir)
+    }
+
+    tasks.register("packageNative") {
+        description = "Build native image and package as macOS .app bundle"
+        group = "build"
+        dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "stripDylibs", "codesignDylibs", "fixRpath", "copyInfoPlist")
+    }
 }
 
-tasks.register<Exec>("stripDylibs") {
-    description = "Strip debug symbols from dylibs to reduce size"
-    group = "build"
-    dependsOn("copyAwtDylibs")
+// ── Windows packaging: flat directory with DLLs ──
 
-    val macosDir = appBundleDir.map { it.dir("MacOS") }
-    commandLine("bash", "-c", "strip -x ${macosDir.get().asFile.absolutePath}/*.dylib")
-}
+if (isWindows) {
+    val windowsOutputDir = layout.buildDirectory.dir("native/compose-graal-vm")
 
-tasks.register<Exec>("codesignDylibs") {
-    description = "Re-sign dylibs after stripping (ad-hoc)"
-    group = "build"
-    dependsOn("stripDylibs")
+    tasks.register<Copy>("copyBinaryToOutput") {
+        description = "Copy native binary into output directory"
+        group = "build"
+        dependsOn("nativeCompile")
 
-    val macosDir = appBundleDir.map { it.dir("MacOS") }
-    commandLine("bash", "-c", "codesign --force --sign - ${macosDir.get().asFile.absolutePath}/*.dylib")
-}
+        from(layout.buildDirectory.file("native/nativeCompile/compose-graal-vm.exe"))
+        into(windowsOutputDir)
+    }
 
-tasks.register<Exec>("fixRpath") {
-    description = "Add @executable_path rpath to native image"
-    group = "build"
-    dependsOn("copyBinaryToApp")
+    tasks.register<Copy>("copyAwtDlls") {
+        description = "Copy AWT DLLs into output directory"
+        group = "build"
+        dependsOn("nativeCompile")
 
-    val binary = appBundleDir.map { it.file("MacOS/compose-graal-vm") }
-    commandLine("install_name_tool", "-add_rpath", "@executable_path/.", binary.get().asFile.absolutePath)
-    isIgnoreExitValue = true
-}
+        from("${javaHomeDir.get()}/bin") {
+            include(
+                "awt.dll", "java.dll", "javajpeg.dll", "fontmanager.dll",
+                "freetype.dll", "lcms.dll", "mlib_image.dll", "splashscreen.dll",
+            )
+        }
+        into(windowsOutputDir)
+    }
 
-tasks.register<Copy>("copyInfoPlist") {
-    description = "Copy Info.plist into .app bundle"
-    group = "build"
+    tasks.register<Copy>("copyJvmDll") {
+        description = "Copy jvm.dll into output directory"
+        group = "build"
+        dependsOn("nativeCompile")
 
-    from(layout.projectDirectory.file("src/main/packaging/Info.plist"))
-    into(appBundleDir)
-}
+        from("${javaHomeDir.get()}/bin/server") {
+            include("jvm.dll")
+        }
+        into(windowsOutputDir)
+    }
 
-tasks.register("packageNative") {
-    description = "Build native image and package as macOS .app bundle"
-    group = "build"
-    dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "stripDylibs", "codesignDylibs", "fixRpath", "copyInfoPlist")
+    tasks.register<Copy>("copyJawtToBin") {
+        description = "Copy jawt.dll to bin/ subdir for Skiko"
+        group = "build"
+        dependsOn("nativeCompile")
+
+        from("${javaHomeDir.get()}/bin") {
+            include("jawt.dll")
+        }
+        into(windowsOutputDir.map { it.dir("bin") })
+    }
+
+    // Also copy jawt.dll into nativeCompile/bin/ so the exe works directly from the build output
+    tasks.register<Copy>("copyJawtToNativeCompileBin") {
+        description = "Copy jawt.dll to nativeCompile/bin/ for Skiko"
+        group = "build"
+        dependsOn("nativeCompile")
+
+        from(layout.buildDirectory.file("native/nativeCompile/jawt.dll"))
+        into(layout.buildDirectory.dir("native/nativeCompile/bin"))
+    }
+
+    tasks.named("nativeCompile") {
+        finalizedBy("copyJawtToNativeCompileBin")
+    }
+
+    tasks.register("packageNative") {
+        description = "Build native image and package with DLLs"
+        group = "build"
+        dependsOn("copyBinaryToOutput", "copyAwtDlls", "copyJvmDll", "copyJawtToBin")
+    }
 }
