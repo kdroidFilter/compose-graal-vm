@@ -77,8 +77,8 @@ jobs:
       - name: Zip artifact (Windows)
         if: matrix.platform == 'windows-x64'
         working-directory: composeApp/build/native
-        shell: bash
-        run: 7z a ${{ github.workspace }}/${{ matrix.artifact-name }}.zip compose-graal-vm
+        shell: pwsh
+        run: Compress-Archive -Path compose-graal-vm -DestinationPath ${{ github.workspace }}/${{ matrix.artifact-name }}.zip
 
       - uses: actions/upload-artifact@v4
         with:
