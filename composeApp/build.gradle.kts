@@ -165,6 +165,15 @@ if (isMac) {
         commandLine("bash", "-c", "codesign --force --sign - ${macosDir.get().asFile.absolutePath}/*.dylib")
     }
 
+    tasks.register<Exec>("codesignBundle") {
+        description = "Ad-hoc sign the entire .app bundle so Gatekeeper shows a consistent signature"
+        group = "build"
+        dependsOn("codesignDylibs", "copyBinaryToApp", "fixRpath", "copyInfoPlist")
+
+        val bundleDir = layout.buildDirectory.dir("native/ComposeGraalVM.app")
+        commandLine("codesign", "--force", "--deep", "--sign", "-", bundleDir.get().asFile.absolutePath)
+    }
+
     tasks.register<Exec>("fixRpath") {
         description = "Add @executable_path rpath to native image"
         group = "build"
@@ -186,7 +195,7 @@ if (isMac) {
     tasks.register("packageNative") {
         description = "Build native image and package as macOS .app bundle"
         group = "build"
-        dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "stripDylibs", "codesignDylibs", "fixRpath", "copyInfoPlist")
+        dependsOn("copyBinaryToApp", "copyAwtDylibs", "copyJawtToLib", "stripDylibs", "codesignDylibs", "codesignBundle", "fixRpath", "copyInfoPlist")
     }
 }
 

@@ -55,6 +55,18 @@ Output per platform:
 | Windows | `composeApp/build/native/compose-graal-vm/` |
 | Linux | `composeApp/build/native/compose-graal-vm/` |
 
+### macOS security warning ("damaged")
+
+Binaries downloaded from the internet receive macOS's quarantine attribute. Because the app is not notarized with an Apple Developer certificate, Gatekeeper will refuse to open it and report it as "damaged".
+
+Remove the quarantine attribute after extracting the zip:
+
+```bash
+xattr -cr ComposeGraalVM.app
+```
+
+Then double-click the app normally. This is expected behaviour for unsigned apps distributed outside the Mac App Store.
+
 ### Collect reflection metadata (tracing agent)
 
 ```bash
